@@ -174,6 +174,9 @@ jobs:
 
           $signingArgs = @(
               "-Pandroid.injected.signing.store.file=$keystorePath",
+              # El keystore de la org es formato JKS; AGP 9 asume PKCS12 por default (JDK 9+)
+              # y falla con "Tag number over 30". Forzar el tipo para que lo lea como JKS.
+              "-Pandroid.injected.signing.store.type=jks",
               "-Pandroid.injected.signing.store.password=${{ secrets.ORG_ANDROID_KEYSTORE_PASSWORD }}",
               "-Pandroid.injected.signing.key.alias=${{ secrets.ORG_ANDROID_KEY_ALIAS }}",
               "-Pandroid.injected.signing.key.password=${{ secrets.ORG_ANDROID_KEY_PASSWORD }}"
