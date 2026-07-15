@@ -65,3 +65,5 @@ app/src/main/java/com/escorial/trazabilidad/
     ├── login/  config/  scan/
     └── controlador/  reparador/  estado/
 ```
+
+<!-- CI: verificación inicial del pipeline de release (dev). -->
