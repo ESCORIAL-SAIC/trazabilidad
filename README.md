@@ -69,3 +69,5 @@ app/src/main/java/com/escorial/trazabilidad/
 <!-- CI: verificación inicial del pipeline de release (dev). -->
 
 <!-- CI: re-verificación del pipeline tras fix de firma JKS. -->
+
+<!-- CI: verificación final del pipeline (secrets de firma OK). -->
