@@ -16,6 +16,7 @@ data class ControladorUiState(
     val error: String? = null,
     val mensaje: String? = null, // p.ej. "Producto LIBERADO."
     val terminado: Boolean = false,
+    val esVinculacionBarral: Boolean = FlujoActual.tipoProducto == "BARRAL",
 )
 
 class ControladorViewModel(
