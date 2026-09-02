@@ -3,8 +3,6 @@ package com.escorial.trazabilidad.ui.controlador
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -16,7 +14,6 @@ import com.escorial.trazabilidad.domain.FlujoActual
 import com.escorial.trazabilidad.ui.common.CampoPickeo
 import com.escorial.trazabilidad.ui.common.TzScaffold
 import com.escorial.trazabilidad.ui.common.parseColorRRGGBB
-import com.escorial.trazabilidad.ui.common.rememberEscaner
 import com.escorial.trazabilidad.ui.navigation.Routes
 import com.escorial.trazabilidad.ui.theme.EkartGreen
 
@@ -26,8 +23,11 @@ fun ControladorScreen(nav: NavController, vm: ControladorViewModel = viewModel()
     val state by vm.state.collectAsState()
     val r = state.resolver
     var barral by remember { mutableStateOf(r?.campoBarral?.valor ?: "") }
-    val escanear = rememberEscaner { codigo -> barral = codigo }
-
+    LaunchedEffect(barral) {
+        if(state.esVinculacionBarral && barral.isNotBlank() && !state.guardando) {
+            vm.registrarOk(barral)
+        }
+    }
     fun volverAScan() {
         FlujoActual.limpiar()
         nav.navigate(Routes.SCAN) { popUpTo(Routes.SCAN) { inclusive = true } }
@@ -68,32 +68,26 @@ fun ControladorScreen(nav: NavController, vm: ControladorViewModel = viewModel()
                     onEnter = {},
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (campo.conCamara) {
-                    OutlinedButton(onClick = escanear, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Escanear código frontal")
-                    }
-                }
             }
 
             Spacer(Modifier.weight(1f))
-
-            Button(
-                onClick = { vm.registrarOk(barral) },
-                enabled = !state.guardando,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = EkartGreen),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) {
-                if (state.guardando) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                else Text("OK / Aprobar")
+            if (!state.esVinculacionBarral) {
+                Button(
+                    onClick = { vm.registrarOk(barral) },
+                    enabled = !state.guardando,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = EkartGreen),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    if (state.guardando) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                    else Text("OK / Aprobar")
+                }
+                OutlinedButton(
+                    onClick = { nav.navigate(Routes.REPARADOR) },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text("Registrar Falla") }
             }
-            OutlinedButton(
-                onClick = { nav.navigate(Routes.REPARADOR) },
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-            ) { Text("Registrar Falla") }
         }
     }
 
