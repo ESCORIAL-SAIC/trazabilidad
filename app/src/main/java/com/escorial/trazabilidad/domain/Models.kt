@@ -24,6 +24,12 @@ object SesionActual {
     var sesion: Sesion? = null
 }
 
+/**
+ * Nombre literal del puesto de Control Final (PUESTOCONTROL_N). Se compara por
+ * string igual que el backend (domain/puestos.ts) y que la app Delphi original.
+ */
+const val PUESTO_CONTROL_FINAL = "Control Final"
+
 /** Tipos de producto seleccionables (igual que ComboBoxTipo del Delphi). */
 val TIPOS_PRODUCTO = listOf(
     "COCINA",

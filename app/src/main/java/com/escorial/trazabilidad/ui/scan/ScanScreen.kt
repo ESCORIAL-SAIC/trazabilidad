@@ -6,7 +6,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -18,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.escorial.trazabilidad.ui.common.CampoPickeo
-import com.escorial.trazabilidad.ui.common.rememberEscaner
 import com.escorial.trazabilidad.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
@@ -35,11 +33,6 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
     // Tecla "Atrás": si el menú está abierto, lo cierra (no sale de la app).
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
-    }
-
-    val escanear = rememberEscaner { codigo ->
-        etiqueta = codigo
-        vm.buscar(codigo)
     }
 
     LaunchedEffect(state.navegarA) {
@@ -147,15 +140,6 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
                 ) {
                     if (state.cargando) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                     else Text("Buscar")
-                }
-                OutlinedButton(
-                    onClick = escanear,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                ) {
-                    Icon(Icons.Filled.QrCodeScanner, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Escanear con cámara")
                 }
             }
         }

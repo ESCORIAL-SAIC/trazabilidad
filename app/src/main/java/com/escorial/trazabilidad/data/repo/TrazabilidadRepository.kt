@@ -18,6 +18,8 @@ class TrazabilidadRepository {
     suspend fun nivel3(nivel2Id: String): List<FallaNivel3Dto> = api.nivel3(nivel2Id)
     suspend fun controlOk(req: ControlOkRequest): ControlOkResponse = api.controlOk(req)
     suspend fun controlFalla(req: ControlFallaRequest): MensajeResponse = api.controlFalla(req)
+    suspend fun validarFrontal(req: ValidarFrontalRequest): ValidarFrontalResponse =
+        api.validarFrontal(req)
     suspend fun controlReparacion(req: ControlReparacionRequest): MensajeResponse =
         api.controlReparacion(req)
 }
