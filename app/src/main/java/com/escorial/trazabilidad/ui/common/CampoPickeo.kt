@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 /**
  * Campo de texto para pistola lectora (teclado en pantalla normal).
  *  - Opcionalmente toma el foco al abrir ([autoFocus]) para pickear de una.
+ *    Cambiar [focusKey] vuelve a pedir el foco (p.ej. tras un pickeo rechazado).
  *  - Al recibir Enter (pistola o teclado): saca el foco y ejecuta [onEnter] con el
  *    texto completo. Usa estado interno para que el Enter no use un valor viejo.
  */
@@ -33,6 +34,7 @@ fun CampoPickeo(
     label: String,
     modifier: Modifier = Modifier,
     autoFocus: Boolean = false,
+    focusKey: Any = Unit,
     keyboardType: KeyboardType = KeyboardType.Number,
     shape: Shape = RoundedCornerShape(8.dp),
     leadingIcon: (@Composable () -> Unit)? = null,
@@ -44,7 +46,7 @@ fun CampoPickeo(
 
     LaunchedEffect(value) { if (value != texto) texto = value }
     if (autoFocus) {
-        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+        LaunchedEffect(focusKey) { focusRequester.requestFocus() }
     }
 
     fun alEnter() {

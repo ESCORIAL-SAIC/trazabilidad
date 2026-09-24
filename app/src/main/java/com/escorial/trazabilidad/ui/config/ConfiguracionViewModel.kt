@@ -7,7 +7,9 @@ import com.escorial.trazabilidad.data.api.dto.PlantaDto
 import com.escorial.trazabilidad.data.api.dto.PuestoDto
 import com.escorial.trazabilidad.data.local.ConfiguracionStore
 import com.escorial.trazabilidad.data.repo.TrazabilidadRepository
+import com.escorial.trazabilidad.BuildConfig
 import com.escorial.trazabilidad.domain.ConfiguracionPuesto
+import com.escorial.trazabilidad.ui.common.VERSION_DESCONOCIDA
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -23,6 +25,10 @@ data class ConfigUiState(
     val cargando: Boolean = false,
     val error: String? = null,
     val guardado: Boolean = false,
+    /** Version de la app (BuildConfig.VERSION_NAME), fija. */
+    val appVersion: String = BuildConfig.VERSION_NAME,
+    /** Version de la API verificada al conectar. Null si nunca se verifico. */
+    val apiVersion: String? = null,
 )
 
 class ConfiguracionViewModel(
@@ -41,6 +47,7 @@ class ConfiguracionViewModel(
                 planta = cfg.planta,
                 tipo = cfg.tipo,
                 puestoIndex = cfg.puestoIndex,
+                apiVersion = store.apiVersion.first(),
             )
             ApiConfig.baseUrl = cfg.serverUrl
             ApiConfig.planta = cfg.planta
@@ -81,6 +88,7 @@ class ConfiguracionViewModel(
                 else lista.firstOrNull()?.id ?: _state.value.planta
                 _state.value = _state.value.copy(plantas = lista, planta = plantaSel)
                 ApiConfig.planta = plantaSel
+                leerVersionApi()
             } catch (e: Exception) {
                 // Fallo intencionalmente silencioso: si el servidor no puede listar plantas,
                 // se deja la planta configurada previamente como única opción y no se bloquea
@@ -88,6 +96,20 @@ class ConfiguracionViewModel(
                 // igual (mismo servidor, misma planta ya persistida) y ese sí es bloqueante.
             }
         }
+    }
+
+    /**
+     * Version de la API, informativa: si /version falla no se invalida la conexion
+     * (el servidor puede ser viejo y no tener el endpoint), solo se marca desconocida.
+     */
+    private suspend fun leerVersionApi() {
+        val version = try {
+            repo.version().version?.takeIf { it.isNotBlank() } ?: VERSION_DESCONOCIDA
+        } catch (e: Exception) {
+            VERSION_DESCONOCIDA
+        }
+        _state.value = _state.value.copy(apiVersion = version)
+        store.guardarApiVersion(version)
     }
 
     private fun cargarPuestos(tipo: String, index: Int) {

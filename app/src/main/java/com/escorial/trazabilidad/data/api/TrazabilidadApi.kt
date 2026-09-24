@@ -9,6 +9,9 @@ import retrofit2.http.Query
 
 interface TrazabilidadApi {
 
+    @GET("version")
+    suspend fun version(): VersionResponse
+
     @GET("plantas")
     suspend fun plantas(): List<PlantaDto>
 
@@ -38,6 +41,9 @@ interface TrazabilidadApi {
 
     @POST("control/falla")
     suspend fun controlFalla(@Body body: ControlFallaRequest): MensajeResponse
+
+    @POST("control/frontal/validar")
+    suspend fun validarFrontal(@Body body: ValidarFrontalRequest): ValidarFrontalResponse
 
     @POST("control/reparacion")
     suspend fun controlReparacion(@Body body: ControlReparacionRequest): MensajeResponse

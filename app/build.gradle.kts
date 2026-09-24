@@ -16,6 +16,19 @@ val keystoreProps = Properties().apply {
 }
 val tieneFirma = keystorePropsFile.exists()
 
+// Clave de acceso a la pantalla de Configuracion, como hash SHA-256 (nunca en texto plano
+// ni versionada). Local: config.properties (gitignored, ver config.properties.example).
+// CI: -PCONFIG_PASSWORD_SHA256=..., derivado en el runner del secret ORG_CONFIG_PASSWORD.
+// Si queda vacia, la pantalla no pide clave (comodo en desarrollo).
+val configPropsFile = rootProject.file("config.properties")
+val configProps = Properties().apply {
+    if (configPropsFile.exists()) load(FileInputStream(configPropsFile))
+}
+val configPasswordSha256: String =
+    (project.findProperty("CONFIG_PASSWORD_SHA256") as String?)
+        ?: configProps.getProperty("CONFIG_PASSWORD_SHA256")
+        ?: ""
+
 android {
     namespace = "com.escorial.trazabilidad"
     compileSdk = 34
@@ -28,6 +41,7 @@ android {
         versionName = "1.1.0-dev"
         // URL base de la API. Cambiar por la del servidor de planta.
         buildConfigField("String", "API_BASE_URL", "\"http://10.90.99.114:3000/\"")
+        buildConfigField("String", "CONFIG_PASSWORD_SHA256", "\"$configPasswordSha256\"")
     }
 
     signingConfigs {

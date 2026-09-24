@@ -159,8 +159,19 @@ data class ControlReparacionRequest(
     val nivel3: NivelRef,
 )
 
+/** Validacion de la grafica frontal contra el producto (QueryCBFrontal). */
+@Serializable
+data class ValidarFrontalRequest(val codigoBarras: String, val productoId: String)
+
+@Serializable
+data class ValidarFrontalResponse(val valido: Boolean = false)
+
 @Serializable
 data class MensajeResponse(val mensaje: String? = null, val id: String? = null)
+
+/** GET /version -> {"name": "trazabilidad-api", "version": "..."}. */
+@Serializable
+data class VersionResponse(val name: String? = null, val version: String? = null)
 
 @Serializable
 data class PlantaDto(val id: String, val nombre: String)
