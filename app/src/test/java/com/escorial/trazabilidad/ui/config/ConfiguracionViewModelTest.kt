@@ -2,9 +2,11 @@ package com.escorial.trazabilidad.ui.config
 
 import com.escorial.trazabilidad.data.api.dto.PlantaDto
 import com.escorial.trazabilidad.data.api.dto.PuestoDto
+import com.escorial.trazabilidad.data.api.dto.VersionResponse
 import com.escorial.trazabilidad.data.local.ConfiguracionStore
 import com.escorial.trazabilidad.data.repo.TrazabilidadRepository
 import com.escorial.trazabilidad.domain.ConfiguracionPuesto
+import com.escorial.trazabilidad.ui.common.VERSION_DESCONOCIDA
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -76,7 +78,10 @@ class ConfiguracionViewModelTest {
     fun setUp() {
         coEvery { repo.plantas() } returns PLANTAS
         coEvery { repo.puestos(any()) } returns PUESTOS_COCINA
+        coEvery { repo.version() } returns VersionResponse(name = "trazabilidad-api", version = "1.2.3")
         coEvery { store.guardar(any()) } returns Unit
+        coEvery { store.guardarApiVersion(any()) } returns Unit
+        every { store.apiVersion } returns flowOf(null)
     }
 
     private fun crearViewModel(config: ConfiguracionPuesto = CONFIG_POR_DEFECTO): ConfiguracionViewModel {
@@ -209,5 +214,34 @@ class ConfiguracionViewModelTest {
 
         coVerify(exactly = 0) { store.guardar(any()) }
         assertFalse(viewModel.state.value.guardado)
+    }
+
+    @Test
+    fun `al conectar guarda y expone la version que reporto la API`() = runTest {
+        val viewModel = crearViewModel()
+
+        assertEquals("1.2.3", viewModel.state.value.apiVersion)
+        coVerify { store.guardarApiVersion("1.2.3") }
+    }
+
+    @Test
+    fun `si la API no expone version, queda como desconocida sin romper la pantalla`() = runTest {
+        coEvery { repo.version() } throws RuntimeException("404")
+
+        val viewModel = crearViewModel()
+
+        val estado = viewModel.state.value
+        assertEquals(VERSION_DESCONOCIDA, estado.apiVersion)
+        assertNull(estado.error) // la version es informativa, no invalida la conexion
+    }
+
+    @Test
+    fun `muestra la version persistida antes de reconectar`() = runTest {
+        every { store.apiVersion } returns flowOf("0.9.0")
+        coEvery { repo.plantas() } throws RuntimeException("sin conexion")
+
+        val viewModel = crearViewModel()
+
+        assertEquals("0.9.0", viewModel.state.value.apiVersion)
     }
 }

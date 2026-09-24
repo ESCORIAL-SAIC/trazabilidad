@@ -7,6 +7,7 @@ import com.escorial.trazabilidad.data.api.ApiConfig
 import com.escorial.trazabilidad.data.api.dto.PlantaDto
 import com.escorial.trazabilidad.data.local.ConfiguracionStore
 import com.escorial.trazabilidad.data.repo.TrazabilidadRepository
+import com.escorial.trazabilidad.ui.common.VERSION_DESCONOCIDA
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -55,6 +56,13 @@ class ServerSetupViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = _state.value.copy(
                     plantas = lista, planta = planta, probando = false, conectado = true,
                 )
+                // Version informativa: si /version falla (servidor viejo) no invalida la conexion.
+                val version = try {
+                    repo.version().version?.takeIf { it.isNotBlank() } ?: VERSION_DESCONOCIDA
+                } catch (e: Exception) {
+                    VERSION_DESCONOCIDA
+                }
+                store.guardarApiVersion(version)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     probando = false,

@@ -12,6 +12,7 @@ class TrazabilidadRepository {
 
     suspend fun login(req: LoginRequest): LoginResponse = api.login(req)
     suspend fun plantas(): List<PlantaDto> = api.plantas()
+    suspend fun version(): VersionResponse = api.version()
     suspend fun puestos(tipo: String): List<PuestoDto> = api.puestos(tipo)
     suspend fun resolver(req: ResolverRequest): ResolverResponse = api.resolver(req)
     suspend fun nivel2(nivel1Id: String): List<FallaNivel2Dto> = api.nivel2(nivel1Id)

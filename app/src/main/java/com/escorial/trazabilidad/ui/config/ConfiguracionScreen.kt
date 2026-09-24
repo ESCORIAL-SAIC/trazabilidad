@@ -18,6 +18,7 @@ import androidx.navigation.NavController
 import com.escorial.trazabilidad.data.local.ConfiguracionStore
 import com.escorial.trazabilidad.domain.TIPOS_PRODUCTO
 import com.escorial.trazabilidad.ui.common.TzScaffold
+import com.escorial.trazabilidad.ui.common.versionesTexto
 import com.escorial.trazabilidad.ui.navigation.Routes
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +117,13 @@ fun ConfiguracionScreen(nav: NavController, vm: ConfiguracionViewModel = configu
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) { Text("Confirmar") }
+
+            Text(
+                text = versionesTexto(appVersion = state.appVersion, apiVersion = state.apiVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
     }
 

@@ -9,6 +9,9 @@ import retrofit2.http.Query
 
 interface TrazabilidadApi {
 
+    @GET("version")
+    suspend fun version(): VersionResponse
+
     @GET("plantas")
     suspend fun plantas(): List<PlantaDto>
 

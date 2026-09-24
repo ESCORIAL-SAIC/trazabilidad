@@ -13,14 +13,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.navigation.NavController
+import com.escorial.trazabilidad.data.local.ConfiguracionStore
+import com.escorial.trazabilidad.ui.common.versionesTexto
 import com.escorial.trazabilidad.ui.navigation.Routes
 import com.escorial.trazabilidad.ui.theme.EkartBlue
 
 @Composable
-fun LoginScreen(nav: NavController, vm: LoginViewModel = viewModel()) {
+fun LoginScreen(nav: NavController, vm: LoginViewModel = loginViewModel()) {
     val state by vm.state.collectAsState()
 
     var usuario1 by remember { mutableStateOf("") }
@@ -129,6 +134,12 @@ fun LoginScreen(nav: NavController, vm: LoginViewModel = viewModel()) {
             }
         }
         Spacer(Modifier.height(24.dp))
+        Text(
+            text = versionesTexto(appVersion = state.appVersion, apiVersion = state.apiVersion),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(16.dp))
     }
 
     state.error?.let { msg ->
@@ -139,4 +150,16 @@ fun LoginScreen(nav: NavController, vm: LoginViewModel = viewModel()) {
             text = { Text(msg) },
         )
     }
+}
+
+/** Construye el ViewModel inyectando un [ConfiguracionStore] atado al contexto de la app. */
+@Composable
+private fun loginViewModel(): LoginViewModel {
+    val context = LocalContext.current
+    val factory = remember(context) {
+        viewModelFactory {
+            initializer { LoginViewModel(store = ConfiguracionStore(context.applicationContext)) }
+        }
+    }
+    return viewModel(factory = factory)
 }

@@ -23,6 +23,7 @@ class ConfiguracionStore(private val context: Context) {
         val PUESTO_INDEX = intPreferencesKey("puesto_index")
         val PUESTO_NOMBRE = stringPreferencesKey("puesto_nombre")
         val PUESTO_C = intPreferencesKey("puesto_c")
+        val API_VERSION = stringPreferencesKey("api_version")
     }
 
     val configuracion: Flow<ConfiguracionPuesto> = context.dataStore.data.map { p ->
@@ -35,6 +36,17 @@ class ConfiguracionStore(private val context: Context) {
             puestoNombre = p[Keys.PUESTO_NOMBRE] ?: "Reparador",
             puestoC = p[Keys.PUESTO_C] ?: 0,
         )
+    }
+
+    /**
+     * Version que reporto `GET /version` la ultima vez que se verifico la conexion.
+     * Null si nunca se verifico; solo informativa (puede quedar desactualizada si el
+     * servidor se actualiza sin reconfigurar la app).
+     */
+    val apiVersion: Flow<String?> = context.dataStore.data.map { it[Keys.API_VERSION] }
+
+    suspend fun guardarApiVersion(version: String) {
+        context.dataStore.edit { p -> p[Keys.API_VERSION] = version }
     }
 
     suspend fun guardar(config: ConfiguracionPuesto) {
