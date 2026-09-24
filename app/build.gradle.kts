@@ -37,8 +37,8 @@ android {
         applicationId = "com.escorial.trazabilidad"
         minSdk = 26
         targetSdk = 34
-        versionCode = 20105
-        versionName = "1.1.0-dev"
+        versionCode = 20107
+        versionName = "1.1.1-dev"
         // URL base de la API. Cambiar por la del servidor de planta.
         buildConfigField("String", "API_BASE_URL", "\"http://10.90.99.114:3000/\"")
         buildConfigField("String", "CONFIG_PASSWORD_SHA256", "\"$configPasswordSha256\"")
@@ -116,6 +116,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("io.mockk:mockk:1.13.11")
 }
+
 
 
 
