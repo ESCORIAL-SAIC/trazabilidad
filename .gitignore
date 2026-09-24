@@ -12,3 +12,6 @@
 keystore.properties
 *.jks
 *.keystore
+
+# Clave de acceso a Configuración (no versionar; ver config.properties.example)
+config.properties

@@ -1,0 +1,5 @@
+# Copiar a config.properties y completar con el hash real.
+# El hash se genera con:
+#   printf '%s' 'LA_CLAVE' | sha256sum | cut -d' ' -f1
+# Si queda vacío, la pantalla de Configuración no pide clave (util en desarrollo).
+CONFIG_PASSWORD_SHA256=

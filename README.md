@@ -38,6 +38,25 @@ a la base TEST `http://10.90.99.114:3000/`. Cambiar por el servidor de planta.
 2. Al continuar se guarda y se marca `inicializado`; las siguientes aperturas van directo al **Login**.
 3. La URL/planta se puede cambiar luego desde el botón "Configurar servidor" en el Login, o desde el ícono de Configuración en la pantalla principal.
 
+## Clave de la pantalla de Configuración
+
+La pantalla de Configuración (menú lateral) pide una clave, para que un operario no
+cambie puesto/servidor sin querer desde el piso. En el repo sólo vive el **hash
+SHA-256**, nunca la clave:
+
+- **Local**: copiar `config.properties.example` a `config.properties` (gitignored) y
+  completar `CONFIG_PASSWORD_SHA256`. Generar el hash con:
+  `printf '%s' 'LA_CLAVE' | sha256sum | cut -d' ' -f1`
+- **CI**: el secret de organización `ORG_CONFIG_PASSWORD` guarda la **clave en texto**; el
+  workflow calcula su SHA-256 en el runner (paso "Derivar hash de la clave de Configuración")
+  y se lo pasa a Gradle. La clave nunca se escribe en el repo ni en el APK, y el hash
+  derivado se enmascara en los logs con `::add-mask::`. Si falta el secret, el build falla.
+- Si el hash queda **vacío** (sin `config.properties` ni `-P`), la pantalla no pide clave.
+  Cómodo en desarrollo, y evita dejar afuera al de planta si un build sale sin el secret.
+
+> Es una barrera contra el toque curioso, no un control de seguridad: una clave embebida
+> en un APK siempre es recuperable descompilando, aunque esté hasheada.
+
 ## Estado de la migracion (pantallas)
 
 | Pantalla | Equivale a (Delphi) | Estado |

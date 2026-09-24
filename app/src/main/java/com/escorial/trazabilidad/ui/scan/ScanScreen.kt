@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.escorial.trazabilidad.ui.common.CampoPickeo
+import com.escorial.trazabilidad.ui.common.DialogoClaveConfig
+import com.escorial.trazabilidad.ui.common.configPideClave
 import com.escorial.trazabilidad.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
@@ -29,6 +31,7 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var pidiendoClave by remember { mutableStateOf(false) }
 
     // Tecla "Atrás": si el menú está abierto, lo cierra (no sale de la app).
     BackHandler(enabled = drawerState.isOpen) {
@@ -83,7 +86,9 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     onClick = {
                         scope.launch { drawerState.close() }
-                        nav.navigate(Routes.CONFIG)
+                        // Configuracion queda detras de una clave: evita que un operario
+                        // cambie puesto/servidor sin querer desde el piso.
+                        if (configPideClave()) pidiendoClave = true else nav.navigate(Routes.CONFIG)
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                 )
@@ -143,6 +148,13 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
                 }
             }
         }
+    }
+
+    if (pidiendoClave) {
+        DialogoClaveConfig(
+            onOk = { pidiendoClave = false; nav.navigate(Routes.CONFIG) },
+            onCancelar = { pidiendoClave = false },
+        )
     }
 
     state.error?.let { msg ->

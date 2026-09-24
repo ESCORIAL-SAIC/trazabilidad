@@ -167,6 +167,26 @@ jobs:
           echo "version=$newVersionName" >> $env:GITHUB_ENV
           echo "versionCode=$newVersionCode" >> $env:GITHUB_ENV
 
+      - name: Derivar hash de la clave de Configuracion
+        shell: pwsh
+        env:
+          CONFIG_PASSWORD: ${{ secrets.ORG_CONFIG_PASSWORD }}
+        run: |
+          # El secret guarda la clave en texto; el APK solo debe llevar su SHA-256.
+          # Se deriva aca (en memoria del runner) para que la clave no exista en el repo.
+          if ([string]::IsNullOrWhiteSpace($env:CONFIG_PASSWORD)) {
+            Write-Error "❌ Falta el secret ORG_CONFIG_PASSWORD"
+            exit 1
+          }
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($env:CONFIG_PASSWORD)
+          $sha = [System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+          $hash = -join ($sha | ForEach-Object { $_.ToString("x2") })
+          # El hash se deriva del secret, asi que GitHub no lo enmascara solo: hay que pedirlo,
+          # o se filtraria en los logs de este job.
+          Write-Host "::add-mask::$hash"
+          echo "CONFIG_PASSWORD_SHA256=$hash" >> $env:GITHUB_ENV
+          Write-Host "✅ Hash de la clave de Configuracion derivado"
+
       - name: Build release APK
         shell: pwsh
         run: |
@@ -179,7 +199,9 @@ jobs:
               "-Pandroid.injected.signing.store.type=jks",
               "-Pandroid.injected.signing.store.password=${{ secrets.ORG_ANDROID_KEYSTORE_PASSWORD }}",
               "-Pandroid.injected.signing.key.alias=${{ secrets.ORG_ANDROID_KEY_ALIAS }}",
-              "-Pandroid.injected.signing.key.password=${{ secrets.ORG_ANDROID_KEY_PASSWORD }}"
+              "-Pandroid.injected.signing.key.password=${{ secrets.ORG_ANDROID_KEY_PASSWORD }}",
+              # Clave de acceso a la pantalla de Configuracion (hash SHA-256, nunca en el repo).
+              "-PCONFIG_PASSWORD_SHA256=$env:CONFIG_PASSWORD_SHA256"
           )
 
           ./gradlew.bat assembleRelease @signingArgs
