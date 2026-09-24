@@ -31,6 +31,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # El default de la action (v3) es 'tools platform-tools', pero Google retiro el
+          # paquete 'tools' del repositorio del SDK y sdkmanager falla con
+          # "Failed to find package 'tools'". Se pide solo lo que existe.
+          packages: platform-tools
 
       - name: Decode keystore from base64
         shell: pwsh
