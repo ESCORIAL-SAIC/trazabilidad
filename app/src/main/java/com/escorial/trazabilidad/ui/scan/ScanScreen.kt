@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Factory
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -81,14 +82,26 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
                 NavigationDrawerItem(
-                    label = { Text("Configuración") },
+                    label = { Text("Configuración de API") },
                     selected = false,
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     onClick = {
                         scope.launch { drawerState.close() }
-                        // Configuracion queda detras de una clave: evita que un operario
-                        // cambie puesto/servidor sin querer desde el piso.
-                        if (configPideClave()) pidiendoClave = true else nav.navigate(Routes.CONFIG)
+                        // Solo la URL del servidor queda detras de una clave: apuntar la app
+                        // a otro backend no es algo que deba hacer un operario desde el piso.
+                        if (configPideClave()) pidiendoClave = true else nav.navigate(Routes.CONFIG_API)
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
+                NavigationDrawerItem(
+                    label = { Text("Configuración de puesto") },
+                    selected = false,
+                    icon = { Icon(Icons.Filled.Factory, contentDescription = null) },
+                    onClick = {
+                        // Sin clave: planta/tipo/puesto es lo que cambia el operario al
+                        // empezar el turno en otra linea.
+                        scope.launch { drawerState.close() }
+                        nav.navigate(Routes.CONFIG_PUESTO)
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                 )
@@ -152,7 +165,7 @@ fun ScanScreen(nav: NavController, vm: ScanViewModel = viewModel()) {
 
     if (pidiendoClave) {
         DialogoClaveConfig(
-            onOk = { pidiendoClave = false; nav.navigate(Routes.CONFIG) },
+            onOk = { pidiendoClave = false; nav.navigate(Routes.CONFIG_API) },
             onCancelar = { pidiendoClave = false },
         )
     }

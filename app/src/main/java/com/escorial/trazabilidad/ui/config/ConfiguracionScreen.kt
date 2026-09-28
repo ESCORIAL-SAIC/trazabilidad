@@ -21,12 +21,14 @@ import com.escorial.trazabilidad.ui.common.TzScaffold
 import com.escorial.trazabilidad.ui.common.versionesTexto
 import com.escorial.trazabilidad.ui.navigation.Routes
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Configuración de la API: solo la URL del servidor. Va detrás de la clave
+ * (ver [com.escorial.trazabilidad.ui.common.DialogoClaveConfig]) porque apunta la app
+ * a otro servidor y no es algo que deba tocar el operario.
+ */
 @Composable
-fun ConfiguracionScreen(nav: NavController, vm: ConfiguracionViewModel = configuracionViewModel()) {
+fun ConfiguracionApiScreen(nav: NavController, vm: ConfiguracionViewModel = configuracionViewModel()) {
     val state by vm.state.collectAsState()
-    var tipoExpanded by remember { mutableStateOf(false) }
-    var plantaExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.guardado) {
         if (state.guardado) {
@@ -34,7 +36,7 @@ fun ConfiguracionScreen(nav: NavController, vm: ConfiguracionViewModel = configu
         }
     }
 
-    TzScaffold(titulo = "Configuración", onBack = { nav.popBackStack() }) { padding ->
+    TzScaffold(titulo = "Configuración de API", onBack = { nav.popBackStack() }) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -50,6 +52,46 @@ fun ConfiguracionScreen(nav: NavController, vm: ConfiguracionViewModel = configu
                 Text("Conectar / recargar")
             }
 
+            Button(
+                onClick = { vm.guardarApi() },
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) { Text("Confirmar") }
+
+            Text(
+                text = versionesTexto(appVersion = state.appVersion, apiVersion = state.apiVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+        }
+    }
+
+    DialogoError(state.error, vm::limpiarError)
+}
+
+/**
+ * Configuración del puesto: planta, tipo de producto y puesto de control.
+ * Sin clave: es lo que el operario cambia al arrancar el turno en otra línea.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ConfiguracionPuestoScreen(nav: NavController, vm: ConfiguracionViewModel = configuracionViewModel()) {
+    val state by vm.state.collectAsState()
+    var tipoExpanded by remember { mutableStateOf(false) }
+    var plantaExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.guardado) {
+        if (state.guardado) {
+            nav.navigate(Routes.SCAN) { popUpTo(Routes.SCAN) { inclusive = true } }
+        }
+    }
+
+    TzScaffold(titulo = "Configuración de puesto", onBack = { nav.popBackStack() }) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Text("Planta", style = MaterialTheme.typography.labelLarge)
             val plantaSel = state.plantas.firstOrNull { it.id == state.planta }
             ExposedDropdownMenuBox(expanded = plantaExpanded, onExpandedChange = { plantaExpanded = it }) {
@@ -117,20 +159,18 @@ fun ConfiguracionScreen(nav: NavController, vm: ConfiguracionViewModel = configu
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) { Text("Confirmar") }
-
-            Text(
-                text = versionesTexto(appVersion = state.appVersion, apiVersion = state.apiVersion),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
         }
     }
 
-    state.error?.let { msg ->
+    DialogoError(state.error, vm::limpiarError)
+}
+
+@Composable
+private fun DialogoError(mensaje: String?, onCerrar: () -> Unit) {
+    mensaje?.let { msg ->
         AlertDialog(
-            onDismissRequest = { vm.limpiarError() },
-            confirmButton = { TextButton(onClick = { vm.limpiarError() }) { Text("OK") } },
+            onDismissRequest = onCerrar,
+            confirmButton = { TextButton(onClick = onCerrar) { Text("OK") } },
             title = { Text("Error") }, text = { Text(msg) },
         )
     }

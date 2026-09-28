@@ -127,6 +127,20 @@ class ConfiguracionViewModel(
         }
     }
 
+    /**
+     * Guarda solo los datos de servidor (pantalla de Configuracion de API).
+     * No toca tipo/puesto: esos se confirman desde Configuracion de puesto.
+     */
+    fun guardarApi() {
+        val s = _state.value
+        viewModelScope.launch {
+            store.guardarServidor(serverUrl = s.serverUrl, planta = s.planta)
+            ApiConfig.baseUrl = s.serverUrl
+            ApiConfig.planta = s.planta
+            _state.value = _state.value.copy(guardado = true)
+        }
+    }
+
     /** ButtonConfirmarClick: persiste todo y actualiza ApiConfig. */
     fun confirmar() {
         val s = _state.value
