@@ -80,6 +80,7 @@ class ConfiguracionViewModelTest {
         coEvery { repo.puestos(any()) } returns PUESTOS_COCINA
         coEvery { repo.version() } returns VersionResponse(name = "trazabilidad-api", version = "1.2.3")
         coEvery { store.guardar(any()) } returns Unit
+        coEvery { store.guardarServidor(any(), any()) } returns Unit
         coEvery { store.guardarApiVersion(any()) } returns Unit
         every { store.apiVersion } returns flowOf(null)
     }
@@ -180,6 +181,18 @@ class ConfiguracionViewModelTest {
 
         assertEquals(1, viewModel.state.value.puestoIndex)
         coVerify(exactly = 1) { repo.puestos(any()) } // solo la carga inicial
+    }
+
+    @Test
+    fun `guardarApi persiste solo servidor y planta, sin tocar el puesto`() = runTest {
+        val viewModel = crearViewModel()
+        viewModel.cambiarServerUrl("http://otro-servidor/")
+
+        viewModel.guardarApi()
+
+        assertTrue(viewModel.state.value.guardado)
+        coVerify { store.guardarServidor("http://otro-servidor/", CONFIG_POR_DEFECTO.planta) }
+        coVerify(exactly = 0) { store.guardar(any()) }
     }
 
     @Test
