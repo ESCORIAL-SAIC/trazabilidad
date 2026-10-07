@@ -73,6 +73,10 @@ SHA-256**, nunca la clave:
   Ej. desde 1.1.2: bugfix → `1.1.3-rc.1`, bugfix → `1.1.3-rc.2`, feature → `1.2.0-rc.1`,
   main → `1.2.0`. La lógica está en `.github/scripts/calcular-version.sh`.
 - `versionCode` es siempre el anterior + 1.
+- El commit de versión se pushea con la deploy key del secret `DEPLOY_KEY_PUBLICAR_APK`
+  (las deploy keys están en el bypass del ruleset "Compilar APK obligatorio"). Al usar
+  una deploy key y no `GITHUB_TOKEN`, el push dispara la recompilación de la PR
+  `dev` → `main` abierta.
 
 ## Estado de la migracion (pantallas)
 

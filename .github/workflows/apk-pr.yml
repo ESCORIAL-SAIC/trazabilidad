@@ -12,8 +12,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     branches: [dev, main]
-  # Lo usa publicar-apk.yml para recompilar la PR dev -> main cuando el bump de
-  # versión pusheado a dev (con GITHUB_TOKEN) no dispara 'synchronize'.
+  # Para recompilar a mano una PR (p. ej. si venció el artifact antes del merge).
   workflow_dispatch:
     inputs:
       pr:
@@ -71,6 +70,17 @@ jobs:
             core.setOutput('base_ref', pr.base.ref);
             core.setOutput('tipo', tipo);
             core.setOutput('aplica', aplica);
+
+      - name: Verificar la deploy key de publicación
+        if: steps.pr.outputs.aplica == 'true'
+        shell: bash
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "❌ Falta el secret DEPLOY_KEY_PUBLICAR_APK: sin él, publicar-apk.yml no puede pushear la versión (ver README)."
+            exit 1
+          fi
 
       - name: Checkout de la PR
         if: steps.pr.outputs.aplica == 'true'

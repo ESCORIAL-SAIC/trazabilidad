@@ -16,8 +16,8 @@ concurrency:
 permissions:
   contents: write
   pull-requests: read
-  # Para descargar el artifact de otro run y re-disparar apk-pr.yml.
-  actions: write
+  # Para descargar el artifact del run de apk-pr.yml.
+  actions: read
 
 jobs:
   publicar:
@@ -33,11 +33,25 @@ jobs:
       versionCode: ${{ steps.verificar.outputs.versionCode }}
 
     steps:
+      - name: Verificar la deploy key de publicación
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "❌ Falta el secret DEPLOY_KEY_PUBLICAR_APK: sin él, publicar-apk.yml no puede pushear la versión (ver README)."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
+          # Se pushea con una deploy key (en el bypass del ruleset "Compilar APK
+          # obligatorio") y no con GITHUB_TOKEN: así el commit de versión puede entrar
+          # a dev/main sin check propio, y al cambiar la cabeza de dev dispara
+          # 'synchronize' en la PR dev -> main, que se recompila sola.
+          ssh-key: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
 
       - name: Buscar el APK compilado en la PR
         id: compilacion
@@ -158,21 +172,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Recompilar la PR dev -> main abierta
-        if: steps.verificar.outputs.destino == 'dev'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # El bump de versión cambió la cabeza de dev, pero un push hecho con GITHUB_TOKEN
-          # no dispara 'synchronize': sin esto la PR a main quedaría sin check.
-          # workflow_dispatch exige que apk-pr.yml ya esté en main (desde el primer release
-          # estable); antes de eso solo se avisa, sin fallar la publicación.
-          for pr in $(gh pr list --base main --head dev --state open --json number -q '.[].number'); do
-            echo "🔁 Recompilando la PR #$pr"
-            gh workflow run apk-pr.yml --ref dev -f pr="$pr" ||
-              echo "::warning::No se pudo recompilar la PR #$pr: cerrala y reabrila para que corra 'Compilar APK'."
-          done
-
   fdroid-publish:
     needs: publicar
     uses: ./.github/workflows/fdroid-publish.yml
@@ -192,6 +191,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
 
       - name: Avanzar dev hasta main
         run: |
