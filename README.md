@@ -79,6 +79,13 @@ SHA-256**, nunca la clave:
   Ej. desde 1.1.2: bugfix → `1.1.3-rc.1`, bugfix → `1.1.3-rc.2`, feature → `1.2.0-rc.1`,
   main → `1.2.0`, bugfix → `1.2.1-rc.1`. La lógica está en `.github/scripts/`.
 - `versionCode` es siempre el anterior + 1.
+- **Tests**: `tests.yml` (check **test**) corre los tests unitarios JVM
+  (`./gradlew testDebugUnitTest`) en cada PR a `dev` o `main`. También es obligatorio
+  para mergear; si falla, el reporte HTML queda como artifact `reporte-tests`.
+  Además publica en la PR el check **JUnit tests** (resumen por clase) y un check por
+  test (`<Clase> › <test>`), como en trazabilidad-api (`.github/scripts/junit-check.js`).
+  Con los secrets `CI_APP_ID`/`CI_APP_PRIVATE_KEY` de la GitHub App "ESCORIAL Trazabilidad
+  CI" aparecen sueltos; sin ellos, agrupados bajo "Tests".
 
 ## Estado de la migracion (pantallas)
 

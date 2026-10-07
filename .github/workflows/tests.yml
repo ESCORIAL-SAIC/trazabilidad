@@ -1,0 +1,71 @@
+name: Tests
+
+# Corre los tests unitarios JVM de la app (app/src/test: JUnit4 + MockK, sin
+# dispositivo) en cada PR. El job "test" es check requerido en los rulesets de
+# dev y main, junto con "Compilar APK" (apk-pr.yml): si un test falla, no se
+# puede mergear. Mismo esquema que trazabilidad-api.
+# Además publica el check "JUnit tests" ("N clases: X passed, Y failed, Z skipped")
+# y un check por test, a partir de los XML JUnit de Gradle
+# (.github/scripts/junit-check.js).
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write   # fallback: crear los checks con el token del workflow si no hay App
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      HAS_APP: ${{ secrets.CI_APP_ID != '' }}   # el if de un step no ve su propio env
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          # Mismo JDK que pide gradle/gradle-daemon-jvm.properties.
+          java-version: 21
+          cache: gradle
+
+      - name: Tests
+        # gradlew no tiene bit de ejecución en el repo: se invoca con bash.
+        run: bash ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Subir reporte de tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-tests
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+      # Con la GitHub App "ESCORIAL Trazabilidad CI" (secretos CI_APP_ID /
+      # CI_APP_PRIVATE_KEY) los checks aparecen sueltos, con el ícono de la app.
+      # Sin los secretos usa el token del workflow y quedan agrupados bajo "Tests /".
+      - name: Token de la GitHub App
+        id: app-token
+        if: ${{ !cancelled() && env.HAS_APP == 'true' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      - name: Checks "JUnit tests" y uno por test
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          script: |
+            const run = require('./.github/scripts/junit-check.js');
+            await run({ github, context, core });
