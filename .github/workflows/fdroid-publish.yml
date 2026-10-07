@@ -30,16 +30,16 @@ jobs:
 
     steps:
       - name: Checkout del repositorio principal
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Descargar el APK de la compilación anterior
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact_name }}
           path: ./downloaded-apk
 
       - name: Checkout del repositorio de F-Droid
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ESCORIAL-SAIC/fdroidrepo
           token: ${{ secrets.ORG_FDROID_REPO_TOKEN }}
