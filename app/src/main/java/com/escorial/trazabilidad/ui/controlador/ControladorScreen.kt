@@ -67,7 +67,7 @@ fun ControladorScreen(nav: NavController, vm: ControladorViewModel = viewModel()
             Text("Puesto: ${r.puestoAsignado?.nombre ?: "-"}", style = MaterialTheme.typography.bodyMedium)
 
             val campo = r.campoBarral
-            if (campo?.visible == true) {
+            if (campo?.visible == true && !state.omitirGrafica) {
                 val etiquetaCampo = campo.prompt ?: "Barral"
                 when {
                     // Fuga: el barral ya viene asociado, se muestra como dato (sin teclado).

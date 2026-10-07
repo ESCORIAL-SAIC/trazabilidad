@@ -18,16 +18,23 @@ data class ControladorUiState(
     val mensaje: String? = null, // p.ej. "Producto LIBERADO."
     val terminado: Boolean = false,
     val esVinculacionBarral: Boolean = FlujoActual.tipoProducto == "BARRAL",
-    // Control Final: hasta que la grafica frontal no coincida no se habilita OK/NOK.
-    val esControlFinal: Boolean =
-        FlujoActual.resolver?.puestoAsignado?.nombre == PUESTO_CONTROL_FINAL,
+    // Control Final de cocinas: hasta que la grafica frontal no coincida no se
+    // habilita OK/NOK. Termos/calefones no llevan grafica frontal.
+    val esControlFinal: Boolean = pideGraficaFrontal(),
+    // Control Final de un producto sin grafica frontal: el campo se oculta.
+    val omitirGrafica: Boolean =
+        FlujoActual.resolver?.puestoAsignado?.nombre == PUESTO_CONTROL_FINAL && !pideGraficaFrontal(),
     val validandoGrafica: Boolean = false,
-    val graficaValidada: Boolean =
-        FlujoActual.resolver?.puestoAsignado?.nombre != PUESTO_CONTROL_FINAL,
+    val graficaValidada: Boolean = !pideGraficaFrontal(),
     val graficaOk: String? = null,    // codigo frontal ya validado
     val graficaRechazo: String? = null, // motivo del rechazo (dialogo)
     val intentoGrafica: Int = 0,      // clave para reenfocar el campo tras un rechazo
 )
+
+/** La grafica frontal solo se valida en Control Final y solo para cocinas. */
+private fun pideGraficaFrontal(): Boolean =
+    FlujoActual.resolver?.puestoAsignado?.nombre == PUESTO_CONTROL_FINAL &&
+        FlujoActual.tipoProducto == "COCINA"
 
 class ControladorViewModel(
     private val repo: TrazabilidadRepository = TrazabilidadRepository(),

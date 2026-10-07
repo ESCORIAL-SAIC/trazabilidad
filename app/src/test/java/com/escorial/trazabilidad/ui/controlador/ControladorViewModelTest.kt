@@ -79,6 +79,18 @@ class ControladorViewModelTest {
     }
 
     @Test
+    fun `en Control Final de termos y calefones no se pide grafica frontal`() = runTest {
+        for (tipo in listOf("TERMOTANQUE", "TERMOTANQUE GAS", "TERMOTANQUE GEISER", "CALEFON")) {
+            FlujoActual.tipoProducto = tipo
+            val estado = crearViewModel().state.value
+
+            assertFalse(tipo, estado.esControlFinal)
+            assertTrue(tipo, estado.omitirGrafica)
+            assertTrue(tipo, estado.graficaValidada)
+        }
+    }
+
+    @Test
     fun `si la grafica coincide se habilitan los botones y se recuerda el codigo`() = runTest {
         coEvery { repo.validarFrontal(any()) } returns ValidarFrontalResponse(valido = true)
         val viewModel = crearViewModel()
