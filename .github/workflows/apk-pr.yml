@@ -5,8 +5,11 @@ name: APK de la PR
 # El job "Compilar APK" es el check obligatorio para mergear a dev/main; al
 # mergear, publicar-apk.yml publica ESTE mismo archivo, sin recompilar.
 #
-# Para que el APK sea exactamente lo que queda mergeado, la PR tiene que estar
-# al día con su rama destino (se verifica acá y en el ruleset de la rama).
+# La versión vigente sale de los tags (ver .github/scripts/version-actual.sh), no
+# de build.gradle.kts. Para que el APK sea exactamente lo que queda mergeado:
+#   - PR a dev: tiene que estar al día con dev (acá y en el ruleset de dev).
+#   - PR dev -> main: main no puede tener cambios que no estén en dev (main
+#     solo acumula los merge commits de cada release, que no cambian archivos).
 
 on:
   pull_request:
@@ -71,17 +74,6 @@ jobs:
             core.setOutput('tipo', tipo);
             core.setOutput('aplica', aplica);
 
-      - name: Verificar la deploy key de publicación
-        if: steps.pr.outputs.aplica == 'true'
-        shell: bash
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
-        run: |
-          if [ -z "$DEPLOY_KEY" ]; then
-            echo "❌ Falta el secret DEPLOY_KEY_PUBLICAR_APK: sin él, publicar-apk.yml no puede pushear la versión (ver README)."
-            exit 1
-          fi
-
       - name: Checkout de la PR
         if: steps.pr.outputs.aplica == 'true'
         uses: actions/checkout@v4
@@ -96,9 +88,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
         run: |
-          # Si se acaba de mergear otra PR, su publicación todavía no pusheó el bump de
+          # Si se acaba de mergear otra PR, su publicación todavía no creó el tag de su
           # versión: compilar ahora calcularía la misma versión que ella. Se espera a
-          # que termine y después se exige estar al día con la rama destino.
+          # que termine y después se verifica contra la rama destino.
           for i in $(seq 1 30); do
             # Por ruta y no con --workflow: eso exige que el archivo ya esté en main.
             pendientes=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?per_page=50" \
@@ -109,10 +101,21 @@ jobs:
           done
           [ "$pendientes" = "0" ] || { echo "❌ La publicación en curso no terminó a tiempo; re-ejecutá este check"; exit 1; }
 
-          git fetch origin "$BASE_REF"
-          if ! git merge-base --is-ancestor "origin/$BASE_REF" HEAD; then
-            echo "❌ La PR no está al día con $BASE_REF. Actualizá la rama (botón 'Update branch') para compilar el APK con la versión correcta."
-            exit 1
+          git fetch --tags --force origin "$BASE_REF"
+          if [ "$BASE_REF" = "dev" ]; then
+            if ! git merge-base --is-ancestor origin/dev HEAD; then
+              echo "❌ La PR no está al día con dev. Actualizá la rama (botón 'Update branch') para compilar el APK con la versión correcta."
+              exit 1
+            fi
+          else
+            # El merge a main tiene que quedar idéntico a dev (lo que se compila acá).
+            arbol=$(git merge-tree --write-tree origin/main HEAD) || {
+              echo "❌ dev no mergea limpio en main: mergeá main en dev primero."; exit 1; }
+            if [ "$arbol" != "$(git rev-parse 'HEAD^{tree}')" ]; then
+              echo "❌ main tiene cambios que no están en dev: mergeá main en dev primero."
+              git diff --stat HEAD "$arbol"
+              exit 1
+            fi
           fi
           echo "BASE_SHA=$(git rev-parse "origin/$BASE_REF")" >> "$GITHUB_ENV"
 
@@ -124,13 +127,9 @@ jobs:
           TIPO: ${{ steps.pr.outputs.tipo }}
         run: |
           set -euo pipefail
-          if [ "$BASE_REF" = "dev" ]; then
-            # rc: se parte de la versión vigente en dev.
-            actual=$(git show "origin/dev:app/build.gradle.kts" | bash .github/scripts/version-gradle.sh leer -)
-          else
-            # estable: se promueve el rc de la cabeza de la PR (dev).
-            actual=$(bash .github/scripts/version-gradle.sh leer app/build.gradle.kts)
-          fi
+          # dev: el próximo rc a partir de la última versión publicada.
+          # main: la estable que corresponde al último rc publicado.
+          actual=$(bash .github/scripts/version-actual.sh app/build.gradle.kts)
           echo "$actual"
           name=$(sed -n 's/^versionName=//p' <<<"$actual")
           code=$(sed -n 's/^versionCode=//p' <<<"$actual")

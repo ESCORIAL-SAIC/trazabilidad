@@ -3,6 +3,10 @@ name: Publicar APK
 # Al mergear una PR a dev (release candidate) o la PR dev -> main (estable),
 # publica el APK que ya compiló apk-pr.yml para la cabeza de esa PR: no recompila.
 # Antes de publicar verifica que ese APK corresponda exactamente a lo mergeado.
+#
+# La versión no se commitea: queda en un tag anotado "versionCode=N" sobre el
+# merge commit (de ahí la lee apk-pr.yml). Así no hay pushes a dev/main que
+# necesiten saltear el check obligatorio del ruleset.
 
 on:
   pull_request:
@@ -33,25 +37,11 @@ jobs:
       versionCode: ${{ steps.verificar.outputs.versionCode }}
 
     steps:
-      - name: Verificar la deploy key de publicación
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
-        run: |
-          if [ -z "$DEPLOY_KEY" ]; then
-            echo "❌ Falta el secret DEPLOY_KEY_PUBLICAR_APK: sin él, publicar-apk.yml no puede pushear la versión (ver README)."
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           fetch-depth: 0
-          # Se pushea con una deploy key (en el bypass del ruleset "Compilar APK
-          # obligatorio") y no con GITHUB_TOKEN: así el commit de versión puede entrar
-          # a dev/main sin check propio, y al cambiar la cabeza de dev dispara
-          # 'synchronize' en la PR dev -> main, que se recompila sola.
-          ssh-key: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
 
       - name: Buscar el APK compilado en la PR
         id: compilacion
@@ -116,6 +106,12 @@ jobs:
           apk="apk-pr/com.escorial.trazabilidad-$version-$versionCode.apk"
           [ -f "$apk" ] || { echo "❌ Falta $apk en el artifact"; exit 1; }
           git rev-parse -q --verify "refs/tags/$version" >/dev/null && { echo "❌ El tag $version ya existe"; exit 1; }
+          # Y que siga siendo la versión que toca después de la última publicada.
+          actual=$(bash .github/scripts/version-actual.sh app/build.gradle.kts)
+          esperada=$(bash .github/scripts/calcular-version.sh "$BASE_REF" "$tipo" \
+            "$(sed -n 's/^versionName=//p' <<<"$actual")" "$(sed -n 's/^versionCode=//p' <<<"$actual")")
+          [ "$esperada" = "version=$version"$'\n'"versionCode=$versionCode" ] || {
+            echo "❌ El APK es $version ($versionCode) pero ahora corresponde: $esperada"; exit 1; }
 
           {
             echo "destino=$BASE_REF"
@@ -125,35 +121,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "✅ Se publica $version ($versionCode) en $BASE_REF"
 
-      - name: Commit de versión y tag
+      - name: Crear tag
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           VERSION: ${{ steps.verificar.outputs.version }}
           VERSION_CODE: ${{ steps.verificar.outputs.versionCode }}
         run: |
           set -euo pipefail
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-          git reset --hard "origin/$BASE_REF"
-          bash .github/scripts/version-gradle.sh escribir app/build.gradle.kts "$VERSION" "$VERSION_CODE"
-          git add app/build.gradle.kts
-          if [ "$BASE_REF" = "main" ]; then
-            git commit -m "chore: release version $VERSION"
-          else
-            git commit -m "chore: bump version $VERSION"
-          fi
-
-          for intento in 1 2 3 4 5; do
-            if git push origin "HEAD:$BASE_REF"; then pushed=1; break; fi
-            echo "⚠️ Push de versión rechazado (intento $intento), re-basando..."
-            git fetch origin "$BASE_REF"
-            git rebase "origin/$BASE_REF"
-          done
-          [ "${pushed:-}" = 1 ] || { echo "❌ No se pudo pushear el commit de versión a $BASE_REF"; exit 1; }
-
-          git tag "$VERSION"
-          git push origin "$VERSION"
+          # Anotado: el mensaje "versionCode=N" es lo que lee version-actual.sh.
+          git tag -a "$VERSION" -m "versionCode=$VERSION_CODE" "$MERGE_SHA"
+          git push origin "refs/tags/$VERSION"
 
       - name: Crear release en GitHub
         uses: softprops/action-gh-release@v2
@@ -180,26 +159,3 @@ jobs:
       current_version_code: ${{ needs.publicar.outputs.destino == 'main' && needs.publicar.outputs.versionCode || '' }}
       current_version: ${{ needs.publicar.outputs.destino == 'main' && needs.publicar.outputs.version || '' }}
     secrets: inherit
-
-  sincronizar-dev:
-    name: Sincronizar dev con main
-    needs: publicar
-    if: needs.publicar.outputs.destino == 'main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ssh-key: ${{ secrets.DEPLOY_KEY_PUBLICAR_APK }}
-
-      - name: Avanzar dev hasta main
-        run: |
-          # dev queda con la versión estable X.Y.Z: el próximo merge a dev arranca el
-          # ciclo siguiente en rc.1 y evita conflictos de versión en la próxima PR a main.
-          git fetch origin main dev
-          if ! git merge-base --is-ancestor origin/dev origin/main; then
-            echo "❌ dev tiene commits que no están en main: mergeá main en dev a mano (quedándote con la versión de main)."
-            exit 1
-          fi
-          git push origin origin/main:refs/heads/dev

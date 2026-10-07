@@ -37,6 +37,8 @@ android {
         applicationId = "com.escorial.trazabilidad"
         minSdk = 26
         targetSdk = 34
+        // Solo para builds locales: la versión publicada la fija el CI desde los tags
+        // del repo (ver "Versiones y publicación" en README.md) y no se commitea acá.
         versionCode = 20109
         versionName = "1.1.2-dev"
         // URL base de la API. Cambiar por la del servidor de planta.
