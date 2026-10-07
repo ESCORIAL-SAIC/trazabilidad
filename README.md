@@ -57,6 +57,23 @@ SHA-256**, nunca la clave:
 > Es una barrera contra el toque curioso, no un control de seguridad: una clave embebida
 > en un APK siempre es recuperable descompilando, aunque esté hasheada.
 
+## Versiones y publicación (CI)
+
+- **En cada PR a `dev` o `main`** el workflow `apk-pr.yml` (check **Compilar APK**)
+  compila y firma el APK con el código de la PR y la versión definitiva, y lo deja
+  como artifact. Es obligatorio para mergear, y la PR tiene que estar al día con su
+  rama destino (si no, el check falla y pide "Update branch").
+- **Al mergear**, `publicar-apk.yml` publica *ese mismo* APK, sin recompilar:
+  commit de versión + tag + release en GitHub + repo F-Droid. Antes verifica que el
+  APK sea del último commit de la PR, con las mismas etiquetas y la misma base.
+- **Versiones**: en `dev` se publican release candidates `X.Y.Z-rc.N`; la PR
+  `dev` → `main` publica la estable `X.Y.Z` y deja `dev` igual a `main`.
+  La etiqueta de la PR (`bugfix` por defecto, `feature`, `breaking`) define a qué
+  versión apunta el ciclo; mientras no suba de nivel, cada merge suma 1 al rc.
+  Ej. desde 1.1.2: bugfix → `1.1.3-rc.1`, bugfix → `1.1.3-rc.2`, feature → `1.2.0-rc.1`,
+  main → `1.2.0`. La lógica está en `.github/scripts/calcular-version.sh`.
+- `versionCode` es siempre el anterior + 1.
+
 ## Estado de la migracion (pantallas)
 
 | Pantalla | Equivale a (Delphi) | Estado |

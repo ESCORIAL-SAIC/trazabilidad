@@ -1,0 +1,262 @@
+name: APK de la PR
+
+# Compila y firma el APK con el código de la PR, con la versión definitiva que se
+# va a publicar (X.Y.Z-rc.N para dev, X.Y.Z para main), y lo deja como artifact.
+# El job "Compilar APK" es el check obligatorio para mergear a dev/main; al
+# mergear, publicar-apk.yml publica ESTE mismo archivo, sin recompilar.
+#
+# Para que el APK sea exactamente lo que queda mergeado, la PR tiene que estar
+# al día con su rama destino (se verifica acá y en el ruleset de la rama).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [dev, main]
+  # Lo usa publicar-apk.yml para recompilar la PR dev -> main cuando el bump de
+  # versión pusheado a dev (con GITHUB_TOKEN) no dispara 'synchronize'.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Número de la PR a compilar
+        required: true
+
+concurrency:
+  group: apk-pr-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  compilar:
+    name: Compilar APK
+    runs-on: windows-latest
+
+    env:
+      ANDROID_HOME: C:\Android\Sdk
+
+    steps:
+      - name: Datos de la PR
+        id: pr
+        uses: actions/github-script@v7
+        env:
+          PR_INPUT: ${{ inputs.pr }}
+        with:
+          script: |
+            const numero = context.payload.pull_request?.number ?? Number(process.env.PR_INPUT);
+            if (!Number.isInteger(numero) || numero <= 0) {
+              core.setFailed(`Número de PR inválido: '${process.env.PR_INPUT}'`);
+              return;
+            }
+            // Siempre se relee la PR: en un re-run o un dispatch el payload puede estar viejo.
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: numero });
+            if (pr.state !== 'open') {
+              core.setFailed(`La PR #${numero} no está abierta`);
+              return;
+            }
+            const labels = pr.labels.map(l => l.name.toLowerCase());
+            let tipo = 'bugfix';
+            if (labels.includes('breaking')) tipo = 'breaking';
+            else if (labels.includes('feature')) tipo = 'feature';
+
+            // A main solo se publica lo que viene de dev (igual que antes); el resto
+            // de las PRs a main pasan el check sin generar APK ni release.
+            const aplica = pr.base.ref === 'dev' || pr.head.ref === 'dev';
+            if (!aplica) core.notice(`PR a main desde '${pr.head.ref}': no genera release`);
+
+            core.setOutput('numero', numero);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('tipo', tipo);
+            core.setOutput('aplica', aplica);
+
+      - name: Checkout de la PR
+        if: steps.pr.outputs.aplica == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          fetch-depth: 0
+
+      - name: Esperar publicaciones en curso y verificar que la PR esté al día
+        if: steps.pr.outputs.aplica == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+        run: |
+          # Si se acaba de mergear otra PR, su publicación todavía no pusheó el bump de
+          # versión: compilar ahora calcularía la misma versión que ella. Se espera a
+          # que termine y después se exige estar al día con la rama destino.
+          for i in $(seq 1 30); do
+            pendientes=$(gh run list --workflow publicar-apk.yml --limit 20 \
+              --json status -q '[.[] | select(.status != "completed")] | length')
+            [ "$pendientes" = "0" ] && break
+            echo "⏳ Hay una publicación en curso, esperando... ($i/30)"
+            sleep 30
+          done
+          [ "$pendientes" = "0" ] || { echo "❌ La publicación en curso no terminó a tiempo; re-ejecutá este check"; exit 1; }
+
+          git fetch origin "$BASE_REF"
+          if ! git merge-base --is-ancestor "origin/$BASE_REF" HEAD; then
+            echo "❌ La PR no está al día con $BASE_REF. Actualizá la rama (botón 'Update branch') para compilar el APK con la versión correcta."
+            exit 1
+          fi
+          echo "BASE_SHA=$(git rev-parse "origin/$BASE_REF")" >> "$GITHUB_ENV"
+
+      - name: Calcular versión
+        if: steps.pr.outputs.aplica == 'true'
+        shell: bash
+        env:
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          TIPO: ${{ steps.pr.outputs.tipo }}
+        run: |
+          set -euo pipefail
+          if [ "$BASE_REF" = "dev" ]; then
+            # rc: se parte de la versión vigente en dev.
+            actual=$(git show "origin/dev:app/build.gradle.kts" | bash .github/scripts/version-gradle.sh leer -)
+          else
+            # estable: se promueve el rc de la cabeza de la PR (dev).
+            actual=$(bash .github/scripts/version-gradle.sh leer app/build.gradle.kts)
+          fi
+          echo "$actual"
+          name=$(sed -n 's/^versionName=//p' <<<"$actual")
+          code=$(sed -n 's/^versionCode=//p' <<<"$actual")
+
+          nueva=$(bash .github/scripts/calcular-version.sh "$BASE_REF" "$TIPO" "$name" "$code")
+          version=$(sed -n 's/^version=//p' <<<"$nueva")
+          versionCode=$(sed -n 's/^versionCode=//p' <<<"$nueva")
+
+          if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+            echo "❌ El tag $version ya existe: no se puede volver a publicar esa versión"
+            exit 1
+          fi
+
+          bash .github/scripts/version-gradle.sh escribir app/build.gradle.kts "$version" "$versionCode"
+          echo "version=$version" >> "$GITHUB_ENV"
+          echo "versionCode=$versionCode" >> "$GITHUB_ENV"
+          echo "### APK $version ($versionCode)" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Versión a publicar: $version (versionCode $versionCode, tipo $TIPO)"
+
+      - name: Set up Java
+        if: steps.pr.outputs.aplica == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Mismo JDK que pide gradle/gradle-daemon-jvm.properties: así Gradle usa
+          # JAVA_HOME y no tiene que descargar el toolchain desde foojay.
+          java-version: 21
+
+      - name: Set up Android SDK
+        if: steps.pr.outputs.aplica == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          # El default de la action (v3) es 'tools platform-tools', pero Google retiro el
+          # paquete 'tools' del repositorio del SDK y sdkmanager falla con
+          # "Failed to find package 'tools'". Se pide solo lo que existe.
+          packages: platform-tools
+
+      - name: Decode keystore from base64
+        if: steps.pr.outputs.aplica == 'true'
+        shell: pwsh
+        run: |
+          $keystorePath = Join-Path $PWD "app/my-release-key.keystore"
+          [System.IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String("${{ secrets.ORG_ANDROID_KEYSTORE_BASE64 }}"))
+          Write-Host "✅ Keystore generado en: $keystorePath"
+
+      - name: Ensure Gradle can find keystore
+        if: steps.pr.outputs.aplica == 'true'
+        shell: pwsh
+        run: |
+          # OJO: '8.11.1' es sólo una carpeta temporal donde dejamos el keystore; el path
+          # exacto que usa el build es el que se pasa en -Pandroid.injected.signing.store.file
+          # más abajo. Si cambian la versión de Gradle, mantené ambos strings iguales.
+          $gradleKeystoreDir = "C:\Users\runneradmin\.gradle\daemon\8.11.1"
+          New-Item -ItemType Directory -Force -Path $gradleKeystoreDir | Out-Null
+          Copy-Item "app/my-release-key.keystore" "$gradleKeystoreDir\my-release-key.keystore" -Force
+          Write-Host "✅ Copiado keystore a $gradleKeystoreDir"
+
+      - name: Derivar hash de la clave de Configuracion
+        if: steps.pr.outputs.aplica == 'true'
+        shell: pwsh
+        env:
+          CONFIG_PASSWORD: ${{ secrets.ORG_CONFIG_PASSWORD }}
+        run: |
+          # El secret guarda la clave en texto; el APK solo debe llevar su SHA-256.
+          # Se deriva aca (en memoria del runner) para que la clave no exista en el repo.
+          if ([string]::IsNullOrWhiteSpace($env:CONFIG_PASSWORD)) {
+            Write-Error "❌ Falta el secret ORG_CONFIG_PASSWORD"
+            exit 1
+          }
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($env:CONFIG_PASSWORD)
+          $sha = [System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+          $hash = -join ($sha | ForEach-Object { $_.ToString("x2") })
+          # El hash se deriva del secret, asi que GitHub no lo enmascara solo: hay que pedirlo,
+          # o se filtraria en los logs de este job.
+          Write-Host "::add-mask::$hash"
+          echo "CONFIG_PASSWORD_SHA256=$hash" >> $env:GITHUB_ENV
+          Write-Host "✅ Hash de la clave de Configuracion derivado"
+
+      - name: Build release APK
+        if: steps.pr.outputs.aplica == 'true'
+        shell: pwsh
+        run: |
+          $keystorePath = "C:\Users\runneradmin\.gradle\daemon\8.11.1\my-release-key.keystore"
+
+          $signingArgs = @(
+              "-Pandroid.injected.signing.store.file=$keystorePath",
+              # El keystore de la org es formato JKS; AGP 9 asume PKCS12 por default (JDK 9+)
+              # y falla con "Tag number over 30". Forzar el tipo para que lo lea como JKS.
+              "-Pandroid.injected.signing.store.type=jks",
+              "-Pandroid.injected.signing.store.password=${{ secrets.ORG_ANDROID_KEYSTORE_PASSWORD }}",
+              "-Pandroid.injected.signing.key.alias=${{ secrets.ORG_ANDROID_KEY_ALIAS }}",
+              "-Pandroid.injected.signing.key.password=${{ secrets.ORG_ANDROID_KEY_PASSWORD }}",
+              # Clave de acceso a la pantalla de Configuracion (hash SHA-256, nunca en el repo).
+              "-PCONFIG_PASSWORD_SHA256=$env:CONFIG_PASSWORD_SHA256"
+          )
+
+          ./gradlew.bat assembleRelease @signingArgs
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ Falló la compilación del APK"
+            exit 1
+          }
+
+          $apkPath = Get-ChildItem "app/build/outputs/apk/release" -Filter *.apk | Select-Object -First 1
+          if (-not $apkPath) {
+            Write-Error "❌ No se generó el APK de release"
+            exit 1
+          }
+
+          New-Item -ItemType Directory -Force -Path "apk-pr" | Out-Null
+          $newApkName = "com.escorial.trazabilidad-$env:version-$env:versionCode.apk"
+          Copy-Item $apkPath.FullName (Join-Path "apk-pr" $newApkName)
+          Write-Host "✅ APK generado: $newApkName"
+
+      - name: Datos de la compilación
+        if: steps.pr.outputs.aplica == 'true'
+        shell: bash
+        env:
+          PR: ${{ steps.pr.outputs.numero }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          TIPO: ${{ steps.pr.outputs.tipo }}
+        run: |
+          # publicar-apk.yml compara esto contra la PR mergeada antes de publicar.
+          jq -n \
+            --argjson pr "$PR" --arg head_sha "$HEAD_SHA" --arg base_ref "$BASE_REF" \
+            --arg base_sha "$BASE_SHA" --arg tipo "$TIPO" \
+            --arg version "$version" --arg versionCode "$versionCode" \
+            '{pr: $pr, head_sha: $head_sha, base_ref: $base_ref, base_sha: $base_sha,
+              tipo: $tipo, version: $version, versionCode: $versionCode}' > apk-pr/compilacion.json
+          cat apk-pr/compilacion.json
+
+      - name: Subir APK
+        if: steps.pr.outputs.aplica == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-pr
+          path: apk-pr/
+          # La PR puede quedar abierta un tiempo antes de mergearse.
+          retention-days: 30
+          if-no-files-found: error

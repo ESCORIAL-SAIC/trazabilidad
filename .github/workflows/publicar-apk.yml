@@ -1,0 +1,201 @@
+name: Publicar APK
+
+# Al mergear una PR a dev (release candidate) o la PR dev -> main (estable),
+# publica el APK que ya compiló apk-pr.yml para la cabeza de esa PR: no recompila.
+# Antes de publicar verifica que ese APK corresponda exactamente a lo mergeado.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [dev, main]
+
+concurrency:
+  group: release-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+  # Para descargar el artifact de otro run y re-disparar apk-pr.yml.
+  actions: write
+
+jobs:
+  publicar:
+    name: Publicar APK
+    if: >-
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.base.ref == 'dev' || github.event.pull_request.head.ref == 'dev')
+    runs-on: ubuntu-latest
+
+    outputs:
+      destino: ${{ steps.verificar.outputs.destino }}
+      version: ${{ steps.verificar.outputs.version }}
+      versionCode: ${{ steps.verificar.outputs.versionCode }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      - name: Buscar el APK compilado en la PR
+        id: compilacion
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headSha = context.payload.pull_request.head.sha;
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...context.repo, workflow_id: 'apk-pr.yml', head_sha: headSha, status: 'success', per_page: 100,
+            });
+            runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            for (const run of runs) {
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({ ...context.repo, run_id: run.id });
+              const art = data.artifacts.find(a => a.name === 'apk-pr' && !a.expired);
+              if (art) {
+                core.info(`APK encontrado en el run ${run.html_url}`);
+                core.setOutput('run_id', run.id);
+                return;
+              }
+            }
+            core.setFailed(
+              `No hay un APK compilado (o venció) para ${headSha}. ` +
+              `Re-ejecutá "APK de la PR" en Actions con este número de PR y después re-ejecutá esta publicación.`);
+
+      - name: Descargar APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apk-pr
+          path: apk-pr
+          run-id: ${{ steps.compilacion.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Verificar que el APK corresponde a lo mergeado
+        id: verificar
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          set -euo pipefail
+          meta="apk-pr/compilacion.json"
+          cat "$meta"
+          campo() { jq -r ".$1" "$meta"; }
+
+          tipo=bugfix
+          if jq -e 'map(ascii_downcase) | index("breaking")' <<<"$LABELS" >/dev/null; then tipo=breaking
+          elif jq -e 'map(ascii_downcase) | index("feature")' <<<"$LABELS" >/dev/null; then tipo=feature
+          fi
+
+          [ "$(campo head_sha)" = "$HEAD_SHA" ] || { echo "❌ El APK es de otro commit de la PR"; exit 1; }
+          [ "$(campo base_ref)" = "$BASE_REF" ] || { echo "❌ El APK se compiló para otra rama destino"; exit 1; }
+          [ "$(campo tipo)" = "$tipo" ] || { echo "❌ Las etiquetas de la PR cambiaron después de compilar ($(campo tipo) -> $tipo)"; exit 1; }
+          # La rama destino justo antes del merge tiene que ser la misma contra la que se compiló.
+          base_previa=$(git rev-parse "$MERGE_SHA^1")
+          [ "$(campo base_sha)" = "$base_previa" ] || {
+            echo "❌ $BASE_REF cambió entre la compilación ($(campo base_sha)) y el merge ($base_previa)"; exit 1; }
+
+          version=$(campo version)
+          versionCode=$(campo versionCode)
+          apk="apk-pr/com.escorial.trazabilidad-$version-$versionCode.apk"
+          [ -f "$apk" ] || { echo "❌ Falta $apk en el artifact"; exit 1; }
+          git rev-parse -q --verify "refs/tags/$version" >/dev/null && { echo "❌ El tag $version ya existe"; exit 1; }
+
+          {
+            echo "destino=$BASE_REF"
+            echo "version=$version"
+            echo "versionCode=$versionCode"
+            echo "apk=$apk"
+          } >> "$GITHUB_OUTPUT"
+          echo "✅ Se publica $version ($versionCode) en $BASE_REF"
+
+      - name: Commit de versión y tag
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          VERSION: ${{ steps.verificar.outputs.version }}
+          VERSION_CODE: ${{ steps.verificar.outputs.versionCode }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git reset --hard "origin/$BASE_REF"
+          bash .github/scripts/version-gradle.sh escribir app/build.gradle.kts "$VERSION" "$VERSION_CODE"
+          git add app/build.gradle.kts
+          if [ "$BASE_REF" = "main" ]; then
+            git commit -m "chore: release version $VERSION"
+          else
+            git commit -m "chore: bump version $VERSION"
+          fi
+
+          for intento in 1 2 3 4 5; do
+            if git push origin "HEAD:$BASE_REF"; then pushed=1; break; fi
+            echo "⚠️ Push de versión rechazado (intento $intento), re-basando..."
+            git fetch origin "$BASE_REF"
+            git rebase "origin/$BASE_REF"
+          done
+          [ "${pushed:-}" = 1 ] || { echo "❌ No se pudo pushear el commit de versión a $BASE_REF"; exit 1; }
+
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
+      - name: Crear release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.verificar.outputs.version }}
+          name: Trazabilidad${{ steps.verificar.outputs.destino == 'dev' && ' (pre-release)' || '' }} - ${{ steps.verificar.outputs.version }}
+          body: ${{ steps.verificar.outputs.version }}
+          files: ${{ steps.verificar.outputs.apk }}
+          prerelease: ${{ steps.verificar.outputs.destino == 'dev' }}
+
+      - name: Dejar el APK para F-Droid
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ steps.verificar.outputs.apk }}
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Recompilar la PR dev -> main abierta
+        if: steps.verificar.outputs.destino == 'dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # El bump de versión cambió la cabeza de dev, pero un push hecho con GITHUB_TOKEN
+          # no dispara 'synchronize': sin esto la PR a main quedaría sin check.
+          for pr in $(gh pr list --base main --head dev --state open --json number -q '.[].number'); do
+            echo "🔁 Recompilando la PR #$pr"
+            gh workflow run apk-pr.yml --ref dev -f pr="$pr"
+          done
+
+  fdroid-publish:
+    needs: publicar
+    uses: ./.github/workflows/fdroid-publish.yml
+    with:
+      # Solo el release estable (main) fija la versión recomendada.
+      current_version_code: ${{ needs.publicar.outputs.destino == 'main' && needs.publicar.outputs.versionCode || '' }}
+      current_version: ${{ needs.publicar.outputs.destino == 'main' && needs.publicar.outputs.version || '' }}
+    secrets: inherit
+
+  sincronizar-dev:
+    name: Sincronizar dev con main
+    needs: publicar
+    if: needs.publicar.outputs.destino == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Avanzar dev hasta main
+        run: |
+          # dev queda con la versión estable X.Y.Z: el próximo merge a dev arranca el
+          # ciclo siguiente en rc.1 y evita conflictos de versión en la próxima PR a main.
+          git fetch origin main dev
+          if ! git merge-base --is-ancestor origin/dev origin/main; then
+            echo "❌ dev tiene commits que no están en main: mergeá main en dev a mano (quedándote con la versión de main)."
+            exit 1
+          fi
+          git push origin origin/main:refs/heads/dev
