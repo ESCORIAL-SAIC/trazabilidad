@@ -79,6 +79,9 @@ SHA-256**, nunca la clave:
   Ej. desde 1.1.2: bugfix → `1.1.3-rc.1`, bugfix → `1.1.3-rc.2`, feature → `1.2.0-rc.1`,
   main → `1.2.0`, bugfix → `1.2.1-rc.1`. La lógica está en `.github/scripts/`.
 - `versionCode` es siempre el anterior + 1.
+- **Tests**: `tests.yml` (check **test**) corre los tests unitarios JVM
+  (`./gradlew testDebugUnitTest`) en cada PR a `dev` o `main`. También es obligatorio
+  para mergear; si falla, el reporte HTML queda como artifact `reporte-tests`.
 
 ## Estado de la migracion (pantallas)
 

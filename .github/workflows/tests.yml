@@ -1,0 +1,45 @@
+name: Tests
+
+# Corre los tests unitarios JVM de la app (app/src/test: JUnit4 + MockK, sin
+# dispositivo) en cada PR. El job "test" es check requerido en los rulesets de
+# dev y main, junto con "Compilar APK" (apk-pr.yml): si un test falla, no se
+# puede mergear. Mismo esquema que trazabilidad-api.
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          # Mismo JDK que pide gradle/gradle-daemon-jvm.properties.
+          java-version: 21
+          cache: gradle
+
+      - name: Tests
+        # gradlew no tiene bit de ejecución en el repo: se invoca con bash.
+        run: bash ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Subir reporte de tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-tests
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
