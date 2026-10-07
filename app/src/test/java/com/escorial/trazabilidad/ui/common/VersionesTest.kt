@@ -7,7 +7,7 @@ class VersionesTest {
 
     @Test
     fun `una version numerica lleva prefijo v`() {
-        assertEquals("App v1.0.2-dev · API v1.2.3", versionesTexto("1.0.2-dev", "1.2.3"))
+        assertEquals("App v1.0.2-rc.1 · API v1.2.3", versionesTexto("1.0.2-rc.1", "1.2.3"))
     }
 
     @Test

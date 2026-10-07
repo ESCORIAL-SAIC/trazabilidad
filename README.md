@@ -57,6 +57,29 @@ SHA-256**, nunca la clave:
 > Es una barrera contra el toque curioso, no un control de seguridad: una clave embebida
 > en un APK siempre es recuperable descompilando, aunque esté hasheada.
 
+## Versiones y publicación (CI)
+
+- **En cada PR a `dev` o `main`** el workflow `apk-pr.yml` (check **Compilar APK**)
+  compila y firma el APK con el código de la PR y la versión definitiva, y lo deja
+  como artifact. Es obligatorio para mergear (ruleset "Compilar APK obligatorio").
+  - PR a `dev`: tiene que estar al día con `dev` (si no, pide "Update branch").
+  - PR `dev` → `main`: `main` no puede tener cambios que no estén en `dev`.
+- **Al mergear**, `publicar-apk.yml` publica *ese mismo* APK, sin recompilar: tag +
+  release en GitHub + repo F-Droid. Antes verifica que el APK sea del último commit
+  de la PR, con las mismas etiquetas, la misma base y la versión que corresponde.
+- **La versión vive en los tags, no en el código**: cada publicación crea un tag
+  anotado `X.Y.Z[-rc.N]` con el mensaje `versionCode=N` sobre el merge commit, y el
+  build siguiente parte del tag con el `versionCode` más alto. `versionName`/`versionCode`
+  de `app/build.gradle.kts` solo valen para builds locales. Como el workflow no
+  pushea commits, no necesita saltear el check obligatorio de las ramas.
+- **Versiones**: en `dev` se publican release candidates `X.Y.Z-rc.N`; la PR
+  `dev` → `main` publica la estable `X.Y.Z`.
+  La etiqueta de la PR (`bugfix` por defecto, `feature`, `breaking`) define a qué
+  versión apunta el ciclo; mientras no suba de nivel, cada merge suma 1 al rc.
+  Ej. desde 1.1.2: bugfix → `1.1.3-rc.1`, bugfix → `1.1.3-rc.2`, feature → `1.2.0-rc.1`,
+  main → `1.2.0`, bugfix → `1.2.1-rc.1`. La lógica está en `.github/scripts/`.
+- `versionCode` es siempre el anterior + 1.
+
 ## Estado de la migracion (pantallas)
 
 | Pantalla | Equivale a (Delphi) | Estado |
