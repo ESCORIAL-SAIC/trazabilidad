@@ -90,8 +90,9 @@ jobs:
           # versión: compilar ahora calcularía la misma versión que ella. Se espera a
           # que termine y después se exige estar al día con la rama destino.
           for i in $(seq 1 30); do
-            pendientes=$(gh run list --workflow publicar-apk.yml --limit 20 \
-              --json status -q '[.[] | select(.status != "completed")] | length')
+            # Por ruta y no con --workflow: eso exige que el archivo ya esté en main.
+            pendientes=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?per_page=50" \
+              -q '[.workflow_runs[] | select(.path == ".github/workflows/publicar-apk.yml" and .status != "completed")] | length')
             [ "$pendientes" = "0" ] && break
             echo "⏳ Hay una publicación en curso, esperando... ($i/30)"
             sleep 30

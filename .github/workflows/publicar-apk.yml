@@ -45,9 +45,10 @@ jobs:
         with:
           script: |
             const headSha = context.payload.pull_request.head.sha;
-            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
-              ...context.repo, workflow_id: 'apk-pr.yml', head_sha: headSha, status: 'success', per_page: 100,
-            });
+            // Se filtra por ruta y no con workflow_id: eso exige que el archivo ya esté en main.
+            const runs = (await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              ...context.repo, head_sha: headSha, status: 'success', per_page: 100,
+            })).filter(r => r.path === '.github/workflows/apk-pr.yml');
             runs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             for (const run of runs) {
               const { data } = await github.rest.actions.listWorkflowRunArtifacts({ ...context.repo, run_id: run.id });
@@ -164,9 +165,12 @@ jobs:
         run: |
           # El bump de versión cambió la cabeza de dev, pero un push hecho con GITHUB_TOKEN
           # no dispara 'synchronize': sin esto la PR a main quedaría sin check.
+          # workflow_dispatch exige que apk-pr.yml ya esté en main (desde el primer release
+          # estable); antes de eso solo se avisa, sin fallar la publicación.
           for pr in $(gh pr list --base main --head dev --state open --json number -q '.[].number'); do
             echo "🔁 Recompilando la PR #$pr"
-            gh workflow run apk-pr.yml --ref dev -f pr="$pr"
+            gh workflow run apk-pr.yml --ref dev -f pr="$pr" ||
+              echo "::warning::No se pudo recompilar la PR #$pr: cerrala y reabrila para que corra 'Compilar APK'."
           done
 
   fdroid-publish:
