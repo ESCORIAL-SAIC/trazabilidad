@@ -33,7 +33,9 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          # Mismo JDK que pide gradle/gradle-daemon-jvm.properties: así Gradle usa
+          # JAVA_HOME y no tiene que descargar el toolchain desde foojay.
+          java-version: 21
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
