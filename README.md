@@ -82,6 +82,10 @@ SHA-256**, nunca la clave:
 - **Tests**: `tests.yml` (check **test**) corre los tests unitarios JVM
   (`./gradlew testDebugUnitTest`) en cada PR a `dev` o `main`. También es obligatorio
   para mergear; si falla, el reporte HTML queda como artifact `reporte-tests`.
+  Además publica en la PR el check **JUnit tests** (resumen por clase) y un check por
+  test (`<Clase> › <test>`), como en trazabilidad-api (`.github/scripts/junit-check.js`).
+  Con los secrets `CI_APP_ID`/`CI_APP_PRIVATE_KEY` de la GitHub App "ESCORIAL Trazabilidad
+  CI" aparecen sueltos; sin ellos, agrupados bajo "Tests".
 
 ## Estado de la migracion (pantallas)
 
